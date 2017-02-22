@@ -3,6 +3,7 @@
 * move <elevator> <-1|0|1>
 * where <elevator>
 * velocity
+* scale <elevator> <floor>
 
 # Events that we can react on
 * b <floor> <-1|1> -- someone requested an elevator on a certain floor
