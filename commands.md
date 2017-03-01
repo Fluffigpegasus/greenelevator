@@ -10,3 +10,4 @@
 * p <elevator> <floor> -- someone inside an elevator requested moving
 * f <elevator> <location> -- location (floor) of an elevator, emitted when moving or on a `where` request
 * v <velocity> -- returns the speed of the elevators
+* s <elevator> <location> -- indicate where an elevator is for the people travelling inside

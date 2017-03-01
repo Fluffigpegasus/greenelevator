@@ -9,6 +9,7 @@ class Elevator extends Thread
 	private boolean moving = false;
 	private boolean emergencyStopped = false;
 	private long doorOpen = -1;
+	private int scaleFloor = -1;
 
 	Elevator(int elevatorId)
 	{
@@ -63,7 +64,15 @@ class Elevator extends Thread
 	void setLocation(double location)
 	{
 		this.location = location;
-
+		
+		int scaleFloorNew = (int) Math.round(location);
+		
+		if (scaleFloorNew != scaleFloor)
+		{
+			scaleFloor = scaleFloorNew ;
+			GreenElevator.sendCommand("scale " + elevatorId + " " + scaleFloorNew);
+		}
+		
 		if (moving && Math.abs(location - destinations.getFirst().getFloor()) < 0.05)
 		{
 			GreenElevator.sendCommand("move " + elevatorId + " 0");
