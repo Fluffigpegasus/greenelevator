@@ -25,13 +25,16 @@ class Elevator extends Thread
 		{
 			if (doorOpen != -1 && System.currentTimeMillis() > doorOpen + 5000)
 			{
-				GreenElevator.sendCommand("door " + elevatorId + " -1");
-				doorOpen = -1;
+				synchronized(this)
+				{
+					GreenElevator.sendCommand("door " + elevatorId + " -1");
+					doorOpen = -1;
 
-				Task next = GreenElevator.getNextTask();
+					Task next = GreenElevator.getNextTask();
 
-				if (next != null) { destinations.add(next); }
-				if (!destinations.isEmpty()) { startMoving(); }
+					if (next != null) { destinations.add(next); }
+					if (!destinations.isEmpty()) { startMoving(); }
+				}
 			}
 
 			try { Thread.sleep(100); }
@@ -45,18 +48,18 @@ class Elevator extends Thread
 		}
 	}
 
-	public void openDoors()
+	synchronized void openDoors()
 	{
 		doorOpen = System.currentTimeMillis();
 		GreenElevator.sendCommand("door " + elevatorId + " 1");
 	}
 
-	public boolean isInUse()
+	boolean isInUse()
 	{
 		return !destinations.isEmpty() || emergencyStopped || doorOpen != -1;
 	}
 
-	public int getElevatorId()
+	int getElevatorId()
 	{
 		return elevatorId;
 	}
@@ -89,7 +92,7 @@ class Elevator extends Thread
 		return location;
 	}
 
-	void giveTask(Task task)
+	synchronized void giveTask(Task task)
 	{
 		assert(destinations.isEmpty());
 
@@ -97,7 +100,7 @@ class Elevator extends Thread
 		startMoving();
 	}
 
-	void addDestination(int floor)
+	synchronized void addDestination(int floor)
 	{
 		for (Task task : destinations)
 		{
@@ -175,7 +178,7 @@ class Elevator extends Thread
 		return destinations;
 	}
 
-	void emergencyStop()
+	synchronized void emergencyStop()
 	{
 		emergencyStopped = true;
 
