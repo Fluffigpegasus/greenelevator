@@ -80,7 +80,7 @@ class GreenElevator
 		socket.close();
 	}
 
-	static void sendCommand(String command)
+	synchronized static void sendCommand(String command)
 	{
 		wr.println(command);
 		wr.flush();
@@ -112,7 +112,7 @@ class GreenElevator
 		synchronized(GreenElevator.class) { GreenElevator.class.notifyAll(); }
 	}
 
-	static void handleOutsideClick(Task task)
+	synchronized static void handleOutsideClick(Task task)
 	{
 		LinkedList<Elevator> sortedElevators = new LinkedList<Elevator>();
 		sortedElevators.add(elevators[1]);
