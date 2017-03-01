@@ -35,7 +35,19 @@ class Elevator extends Thread
 
 			try { Thread.sleep(100); }
 			catch (Exception exception) {}
+
+			if (!isInUse())
+			{
+				try { synchronized(GreenElevator.class) { wait(); } }
+				catch (Exception exception) {}
+			}
 		}
+	}
+
+	public void openDoors()
+	{
+		doorOpen = System.currentTimeMillis();
+		GreenElevator.sendCommand("door " + elevatorId + " 1");
 	}
 
 	public boolean isInUse()
@@ -52,11 +64,11 @@ class Elevator extends Thread
 	{
 		this.location = location;
 
-		if (moving && Math.abs(location - destinations.getFirst().getFloor()) < 0.1)
+		if (moving && Math.abs(location - destinations.getFirst().getFloor()) < 0.05)
 		{
 			GreenElevator.sendCommand("move " + elevatorId + " 0");
-			doorOpen = System.currentTimeMillis();
-			GreenElevator.sendCommand("door " + elevatorId + " 1");
+			
+			openDoors();
 
 			destinations.poll();
 			moving = false;
@@ -77,8 +89,12 @@ class Elevator extends Thread
 	}
 
 	void addDestination(int floor)
-	{hat programming environments (software) and computing platforms (a computer and OS) you used for implementation.
-Describe algorithms you have
+	{
+		for (Task task : destinations)
+		{
+			if (task.getFloor() == floor) { return; }
+		}
+
 		Task task = new Task(floor, null);
 		boolean isAdded = false;
 
@@ -87,64 +103,57 @@ Describe algorithms you have
 		{
 			Direction currentDirection = location - destinations.getFirst().getFloor() > 0 ? Direction.DOWN : Direction.UP;
 
-			if (destinations.size() == 1)
+			if (location > floor && floor > destinations.getFirst().getFloor() ||
+			    location < floor && floor < destinations.getFirst().getFloor())
 			{
-				if (currentDirection == Direction.DOWN && destinations.getFirst().getFloor() < floor ||
-				    currentDirection == Direction.UP && destinations.getFirst().getFloor() > floor)
-				{
-					destinations.add(0, task);
-					isAdded = true;
-				}
+				destinations.add(0, task);
+				isAdded = true;
 			}
 
 			else if (destinations.size() > 1)
 			{
-				if (currentDirection == Direction.DOWN && floor < location && destinations.getFirst().getFloor() < floor ||
-				    currentDirection == Direction.UP && floor > location && destinations.getFirst().getFloor() > floor)
+				Iterator<Task> iterator = destinations.iterator();
+				Task taskPrev = null;
+				Task taskNext = null;
+
+				int i = 0;
+
+				while (iterator.hasNext())
 				{
-					destinations.add(0, task);
-					isAdded = true;
-				}
-
-				else
-				{
-					Iterator<Task> iterator = destinations.iterator();
-					Task taskPrev = null;
-					Task taskNext = null;
-
-					int i = 0;
-
-					while (iterator.hasNext())
+					if (taskPrev == null)
 					{
-						if (taskPrev == null)
-						{
-							taskPrev = iterator.next();
-							taskNext = iterator.next();
-
-							i++;
-							continue;
-						}
-
-						if (currentDirection == Direction.DOWN && taskPrev.getFloor() > floor && taskNext.getFloor() < floor ||
-						    currentDirection == Direction.UP && taskPrev.getFloor() < floor && taskNext.getFloor() > floor)
-						{
-							destinations.add(i, task);
-							isAdded = true;
-						}
-
-						if (!iterator.hasNext()) { break; }
-
-						taskPrev = taskNext;
+						taskPrev = iterator.next();
 						taskNext = iterator.next();
 
 						i++;
 					}
+
+					if (taskPrev.getFloor() > floor && floor > taskNext.getFloor() ||
+					    taskPrev.getFloor() < floor && floor < taskNext.getFloor())
+					{
+						destinations.add(i, task);
+						isAdded = true;
+						break;
+					}
+
+					if (!iterator.hasNext()) { break; }
+
+					taskPrev = taskNext;
+					taskNext = iterator.next();
+
+					i++;
 				}
 			}
 		}
 
 		if (!isAdded) { destinations.add(task); }
-		if (destinations.size() == 1) { startMoving(); }
+		
+		if (destinations.size() == 1)
+		{
+			emergencyStopped = false;
+			
+			if (doorOpen == -1) { startMoving(); }
+		}
 	}
 
 	Task getDestination()
@@ -152,9 +161,9 @@ Describe algorithms you have
 		return destinations.getFirst();
 	}
 
-	int getDestinations()
+	LinkedList<Task> getDestinations()
 	{
-		return destinations.size();
+		return destinations;
 	}
 
 	void emergencyStop()
@@ -167,6 +176,8 @@ Describe algorithms you have
 		{
 			if (task.getDirection() != null) { GreenElevator.handleOutsideClick(task); }
 		}
+		
+		synchronized(GreenElevator.class) { GreenElevator.class.notifyAll(); }		
 
 		destinations.clear();
 	}

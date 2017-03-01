@@ -1,14 +1,13 @@
 import java.net.Socket;
 import java.io.*;
 import java.util.LinkedList;
+import java.util.Iterator;
 
 class GreenElevator
 {
 	private static Elevator[] elevators;
 	private static PrintWriter wr;
 	private static LinkedList<Task> queue = new LinkedList<Task>();
-
-	static boolean debug = false;
 
 	public static void main(String[] args) throws Exception
 	{
@@ -57,8 +56,6 @@ class GreenElevator
 
 		while ((commandWithArguments = rd.readLine()) != null)
 		{
-			if (debug) { System.out.println("RECV: " + commandWithArguments); }
-
 			char command = commandWithArguments.charAt(0);
 
 			switch (command)
@@ -85,7 +82,6 @@ class GreenElevator
 
 	static void sendCommand(String command)
 	{
-		if (debug) { System.out.println("SENT: " + command); }
 		wr.println(command);
 		wr.flush();
 	}
@@ -96,6 +92,7 @@ class GreenElevator
 		Task task = new Task(Integer.parseInt(split[1]), split[2].equals("1") ? Direction.UP : Direction.DOWN);
 
 		handleOutsideClick(task);
+		synchronized(GreenElevator.class) { GreenElevator.class.notifyAll(); }
 	}
 
 	// inform the elevator of its position
@@ -109,70 +106,150 @@ class GreenElevator
 	{
 		String[] split = commandWithArguments.split(" ");
 
-		if(split[2].equals("32000"))
-		{
-			elevators[Integer.parseInt(split[1])].emergencyStop();
-			return;
-		}
+		if (split[2].equals("32000")) { elevators[Integer.parseInt(split[1])].emergencyStop(); }
+		else { elevators[Integer.parseInt(split[1])].addDestination(Integer.parseInt(split[2])); }
 
-		else
-		{
-			elevators[Integer.parseInt(split[1])].addDestination(Integer.parseInt(split[2]));
-		}
+		synchronized(GreenElevator.class) { GreenElevator.class.notifyAll(); }
 	}
 
 	static void handleOutsideClick(Task task)
 	{
-		Elevator candidate = null;
-		double min = -1;
-
-		for (int i = 1; i < elevators.length; i++)
+		LinkedList<Elevator> sortedElevators = new LinkedList<Elevator>();
+		sortedElevators.add(elevators[1]);
+		
+		// check if there already is an elevator heading for this floor -- if so, don't proceed
+		for (int j = 1; j < elevators.length; j++)
 		{
-			if (!elevators[i].isEmergencyStopped() &&
-			    elevators[i].getDestinations() == 1 &&
-			    elevators[i].getDestination().getFloor() == task.getFloor() &&
-			    elevators[i].getDestination().getDirection() != (task.getDirection() == Direction.UP ? Direction.DOWN : Direction.UP) &&
-			    (Math.abs(elevators[i].getLocation() - task.getFloor()) < min || min < 0))
+			if (elevators[j].isInUse() && !elevators[j].getDestinations().isEmpty() && elevators[j].getDestinations().getFirst().getFloor() == task.getFloor() && (elevators[j].getDestinations().getFirst().getDirection() == null || elevators[j].getDestinations().getFirst().getDirection() == task.getDirection()))
 			{
-				candidate = elevators[i];
+				return;
 			}
 		}
 
-		if (candidate != null)
+		outer1:
+		for (int j = 2; j < elevators.length; j++)
 		{
-			if (candidate.getDestination().getDirection() == null) { candidate.getDestination().setDirection(task.getDirection()); }
-			return;
+			double distance = Math.abs(elevators[j].getLocation() - task.getFloor());
+			int i = 0;
+
+			for (Elevator otherElevator : sortedElevators)
+			{
+				if (Math.abs(otherElevator.getLocation() - task.getFloor()) > distance)
+				{
+					sortedElevators.add(i, elevators[j]);
+					continue outer1;
+				}
+
+				i++;
+			}
+
+			sortedElevators.add(elevators[j]);
 		}
 
-		if(queue.isEmpty())
+		// try to assign the task to an elevator
+		outer2:
+		for (Elevator elevator : sortedElevators)
 		{
-			candidate = null;
-			min = -1;
+			if (elevator.isEmergencyStopped()) { continue; }
 
-			for(int i = 1; i < elevators.length; i++)
+			if (!elevator.isInUse()) 
 			{
-				if(!elevators[i].isInUse() && (Math.abs(elevators[i].getLocation() - task.getFloor()) < min || min < 0))
+				elevator.giveTask(task);
+				return;
+			}
+
+			// the elevator is on our floor and it's not being used any longer
+			else if (elevator.getDestinations().isEmpty() && Math.abs(elevator.getLocation() - task.getFloor()) < 0.05)
+			{
+				elevator.openDoors();
+				return;
+			}
+
+			// does it pass by our floor before its next destination?
+			else if (!elevator.getDestinations().isEmpty())
+			{
+				for (Task destination : elevator.getDestinations())
 				{
-					candidate = elevators[i];
+					if (destination.getDirection() != null && destination.getDirection() != task.getDirection()) { continue outer2; }
+				}
+
+				LinkedList<Task> destinationsAll = new LinkedList<Task>(elevator.getDestinations());
+				destinationsAll.add(0, new Task(elevator.getLocation(), null));
+
+				// is the elevator passing us right now?
+				boolean elevatorPassingBy = false;
+
+				// does it pass by our floor at all?
+				Iterator<Task> iterator = destinationsAll.iterator();
+
+				Task taskPrev = null;
+				Task taskNext = null;
+
+				int j = 0;
+
+				while (iterator.hasNext())
+				{
+					if (taskPrev == null)
+					{
+						taskPrev = iterator.next();
+						taskNext = iterator.next();
+
+						j++;
+					}
+
+					if (
+					     (taskPrev.getFloor() > task.getFloor() && task.getFloor() > taskNext.getFloor() && task.getDirection() == Direction.DOWN)
+					     ||
+					     (taskPrev.getFloor() < task.getFloor() && task.getFloor() < taskNext.getFloor() && task.getDirection() == Direction.UP)
+					    )
+					{
+						elevatorPassingBy = true;
+						break;
+					}
+
+					if (!iterator.hasNext()) { break; }
+
+					taskPrev = taskNext;
+					taskNext = iterator.next();
+
+					j++;
+				}
+
+				// is the queue strictly smaller or stricly larger?
+				if (elevatorPassingBy)
+				{
+					double prev = -1;
+					int k = 0;
+					boolean strictlyIncreasing = true;
+					boolean strictlyDecreasing = true;
+
+					for (Task destination : destinationsAll)
+					{
+						if (k > 0)
+						{
+							if (strictlyIncreasing && destination.getFloor() <= prev) { strictlyIncreasing = false; }
+							if (strictlyDecreasing && destination.getFloor() >= prev) { strictlyDecreasing = false; }
+						}
+
+						prev = destination.getFloor();
+						k++;
+					}
+
+					if (strictlyIncreasing || strictlyDecreasing)
+					{
+						elevator.addDestination((int) task.getFloor());
+						return;
+					}
 				}
 			}
-			if (candidate == null) { addTask(task); }
-			else { candidate.giveTask(task); }
 		}
-
-		else
-		{
-			addTask(task);
-		}
+		
+		// no elevator was available to handle our task -- stall it
+		queue.add(task);
 	}
 
 	synchronized static Task getNextTask()
 	{
 		return queue.poll();
-	}
-
-	synchronized static void addTask(Task task)
-	{
-		queue.add(task);
 	}
 }

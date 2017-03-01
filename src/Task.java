@@ -1,15 +1,21 @@
 class Task
 {
-	private int floor;
+	private double floor;
 	private Direction direction;
 
-	Task(int floor, Direction direction)
+	Task(double floor, Direction direction)
 	{
 		this.floor = floor;
 		this.direction = direction;
 	}
 
-	int getFloor()
+	Task(int floor, Direction direction)
+	{
+		this.floor = (double) floor;
+		this.direction = direction;
+	}
+
+	double getFloor()
 	{
 		return floor;
 	}
